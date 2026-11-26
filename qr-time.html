@@ -1,0 +1,124 @@
+<title>QR Часы</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: одна центральная карточка; на экране QR, после сканирования та же страница открывается в режиме больших часов */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --fg: #14202b;
+  --muted: #5b6b79;
+  --accent: #0a6cff;
+  --line: #d3dbe3;
+  --qr-bg: #ffffff;
+  --qr-fg: #0b1620;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d141b; --surface: #16202a; --fg: #eaf0f5; --muted: #93a3b2;
+    --accent: #5aa2ff; --line: #26333f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d141b; --surface: #16202a; --fg: #eaf0f5; --muted: #93a3b2;
+  --accent: #5aa2ff; --line: #26333f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  min-height: 100vh;
+}
+main { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1 { font-family: var(--font-display); font-size: 1.6rem; margin: 0; text-wrap: balance; }
+p { margin: 0; line-height: 1.5; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+#qr { background: var(--qr-bg); padding: 14px; border-radius: 8px; line-height: 0; }
+#qr img, #qr canvas { max-width: 100%; height: auto; }
+.url { font-size: 0.78rem; color: var(--muted); word-break: break-all; text-align: center; }
+label { font-size: 0.8rem; color: var(--muted); align-self: stretch; display: flex; flex-direction: column; gap: 6px; }
+input { font: inherit; font-size: 0.9rem; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; }
+button { font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.clock { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: clamp(3rem, 18vw, 5.5rem); font-weight: 600; letter-spacing: -0.02em; }
+.date { color: var(--fg); font-size: 1.1rem; text-align: center; }
+.tz { font-size: 0.85rem; color: var(--muted); }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+</style>
+
+<main>
+  <section id="view-qr">
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <h1>Отсканируйте код, чтобы узнать время</h1>
+        <p style="margin-top:8px">Наведите камеру телефона на QR. Откроется страница с текущим временем на вашем устройстве.</p>
+      </div>
+      <div class="card">
+        <div id="qr" aria-label="QR-код со ссылкой на страницу с часами"></div>
+        <div class="url" id="url-text"></div>
+        <label for="link">Если код не открывается, вставьте сюда ссылку на эту страницу
+          <input id="link" type="url" placeholder="https://claude.ai/artifact/…" autocomplete="off">
+        </label>
+        <button id="apply" type="button">Обновить QR</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-time" hidden>
+    <div class="card">
+      <div class="eyebrow">Ваше время сейчас</div>
+      <div class="clock" id="clock" role="timer" aria-live="off">--:--:--</div>
+      <div class="date" id="date"></div>
+      <div class="tz" id="tz"></div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+  var MARK = "#time";
+  var qrBox = document.getElementById("qr");
+  var urlText = document.getElementById("url-text");
+
+  function base() { return location.href.split("#")[0]; }
+
+  function drawQr(target) {
+    qrBox.innerHTML = "";
+    urlText.textContent = target;
+    if (typeof QRCode === "undefined") { qrBox.textContent = "Не удалось загрузить библиотеку QR."; return; }
+    new QRCode(qrBox, { text: target, width: 240, height: 240, colorDark: "#0b1620", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function tick() {
+    var d = new Date();
+    document.getElementById("clock").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+    document.getElementById("date").textContent = d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    var zone = "";
+    try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+    var off = -d.getTimezoneOffset(), sign = off >= 0 ? "+" : "-", a = Math.abs(off);
+    document.getElementById("tz").textContent = (zone ? zone + " · " : "") + "UTC" + sign + pad(Math.floor(a / 60)) + ":" + pad(a % 60);
+  }
+
+  function route() {
+    var showTime = location.hash === MARK;
+    document.getElementById("view-time").hidden = !showTime;
+    document.getElementById("view-qr").hidden = showTime;
+    if (showTime) { tick(); }
+  }
+
+  drawQr(base() + MARK);
+  setInterval(function () { if (location.hash === MARK) tick(); }, 1000);
+  window.addEventListener("hashchange", route);
+  route();
+
+  document.getElementById("apply").addEventListener("click", function () {
+    var v = document.getElementById("link").value.trim().split("#")[0];
+    if (v) drawQr(v + MARK);
+  });
+})();
+</script>
